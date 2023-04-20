@@ -13,6 +13,9 @@ from PIL import Image
 import base64
 from io import BytesIO
 from random import randint
+from EmotionClassifier import EmotionClassifier
+from Summarizer import Summarizer
+from Captioner import Captioner
 import webuiapi
 from colorama import Fore, Style, init as colorama_init
 
@@ -23,7 +26,8 @@ colorama_init()
 # Also try: 'Qiliang/bart-large-cnn-samsum-ElectrifAi_v10'
 DEFAULT_SUMMARIZATION_MODEL = 'Qiliang/bart-large-cnn-samsum-ChatGPT_v3'
 # Also try: 'joeddav/distilbert-base-uncased-go-emotions-student'
-DEFAULT_CLASSIFICATION_MODEL = 'bhadresh-savani/distilbert-base-uncased-emotion'
+# Also try: 'bhadresh-savani/distilbert-base-uncased-emotion'
+DEFAULT_CLASSIFICATION_MODEL = 'arpanghoshal/EmoRoBERTa'
 # Also try: 'Salesforce/blip-image-captioning-base'
 DEFAULT_CAPTIONING_MODEL = 'Salesforce/blip-image-captioning-large'
 DEFAULT_KEYPHRASE_MODEL = 'ml6team/keyphrase-extraction-distilbert-inspec'
@@ -118,20 +122,15 @@ torch_dtype = torch.float32 if device_string == "cpu" else torch.float16
 
 if 'caption' in modules:
     print('Initializing an image captioning model...')
-    captioning_processor = AutoProcessor.from_pretrained(captioning_model)
-    if 'blip' in captioning_model:
-        captioning_transformer = BlipForConditionalGeneration.from_pretrained(captioning_model, torch_dtype=torch_dtype).to(device)
-    else:
-        captioning_transformer = AutoModelForCausalLM.from_pretrained(captioning_model, torch_dtype=torch_dtype).to(device)
+    captioner = Captioner(captioning_model, device, torch_dtype)
 
 if 'summarize' in modules:
     print('Initializing a text summarization model...')
-    summarization_tokenizer = AutoTokenizer.from_pretrained(summarization_model)
-    summarization_transformer = AutoModelForSeq2SeqLM.from_pretrained(summarization_model, torch_dtype=torch_dtype).to(device)
+    summarizer = Summarizer(summarization_model, device, torch_dtype)
 
 if 'classify' in modules:
     print('Initializing a sentiment classification pipeline...')
-    classification_pipe = pipeline("text-classification", model=classification_model, top_k=None, device=device, torch_dtype=torch_dtype)
+    classifier = EmotionClassifier(classification_model, device)
 
 if 'keywords' in modules:
     print('Initializing a keyword extraction pipeline...')
@@ -206,52 +205,19 @@ def require_module(name):
 
 # AI stuff
 def classify_text(text: str) -> list:
-    output = classification_pipe(text, truncation=True, max_length=classification_pipe.model.config.max_position_embeddings)[0]
+    output = classifier.text_to_reaction(text)
     return sorted(output, key=lambda x: x['score'], reverse=True)
-
-
-def caption_image(raw_image: Image, max_new_tokens: int = 20) -> str:
-    inputs = captioning_processor(raw_image.convert('RGB'), return_tensors="pt").to(device, torch_dtype)
-    outputs = captioning_transformer.generate(**inputs, max_new_tokens=max_new_tokens)
-    caption = captioning_processor.decode(outputs[0], skip_special_tokens=True)
-    return caption
-
 
 def summarize_chunks(text: str, params: dict) -> str:
     try:
-        return summarize(text, params)
+        summary = summarizer.summarize(text, params)
+        return normalize_string(summary)
     except IndexError:
         print("Sequence length too large for model, cutting text in half and calling again")
         new_params = params.copy()
         new_params['max_length'] = new_params['max_length'] // 2
         new_params['min_length'] = new_params['min_length'] // 2
         return summarize_chunks(text[:(len(text) // 2)], new_params) + summarize_chunks(text[(len(text) // 2):], new_params)
-
-
-def summarize(text: str, params: dict) -> str:
-    # Tokenize input
-    inputs = summarization_tokenizer(text, return_tensors="pt").to(device)
-    token_count = len(inputs[0])
-
-    bad_words_ids = [
-        summarization_tokenizer(bad_word, add_special_tokens=False).input_ids
-        for bad_word in params['bad_words']
-    ]
-    summary_ids = summarization_transformer.generate(
-        inputs["input_ids"],
-        num_beams=2,
-        max_new_tokens=max(token_count, int(params['max_length'])),
-        min_new_tokens=min(token_count, int(params['min_length'])),
-        repetition_penalty=float(params['repetition_penalty']),
-        temperature=float(params['temperature']),
-        length_penalty=float(params['length_penalty']),
-        bad_words_ids=bad_words_ids,
-    )
-    summary = summarization_tokenizer.batch_decode(
-        summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
-    )[0]
-    summary = normalize_string(summary)
-    return summary
 
 
 def normalize_string(input: str) -> str:
@@ -336,7 +302,7 @@ def get_extensions():
             {
                 'name': 'not-supported',
                 'metadata': {
-                        "display_name": """<span style="white-space:break-spaces;">Extensions serving using Extensions API is no longer supported. Please update the mod from: <a href="https://github.com/Cohee1207/SillyTavern">https://github.com/Cohee1207/SillyTavern</a></span>""",
+                        "display_name": """<span style="white-space:break-spaces;">Extensions serving using Extensions API is no longer supported. Please update the mod from: <a href="https://github.com/Cohee1207/SillyTavern">https://github.com/Cohee1207/SillyTavern</a></span>""",                        
                         "requires": [],
                         "assets": []
                 }
@@ -355,12 +321,8 @@ def api_caption():
         abort(400, '"image" is required')
 
     image = Image.open(BytesIO(base64.b64decode(data['image'])))
-    image = image.convert('RGB')
-    image.thumbnail((512, 512))
-    caption = caption_image(image)
-    thumbnail = image_to_base64(image)
-    print('Caption:', caption, sep="\n")
-    return jsonify({'caption': caption, 'thumbnail': thumbnail})
+    caption =  captioner.caption_image(image)
+    return jsonify({'caption': caption})
 
 
 @app.route('/api/summarize', methods=['POST'])
@@ -399,8 +361,7 @@ def api_classify():
 @app.route('/api/classify/labels', methods=['GET'])
 @require_module('classify')
 def api_classify_labels():
-    classification = classify_text('')
-    labels = [x['label'] for x in classification]
+    labels = classifier.get_all_reactions()
     return jsonify({'labels': labels})
 
 
@@ -431,9 +392,7 @@ def api_prompt():
     if 'name' in data and isinstance(data['name'], str):
         keywords.insert(0, data['name'])
 
-    print('Prompt input:', data['text'], sep="\n")
     prompts = generate_prompt(keywords)
-    print('Prompt output:', prompts, sep="\n")
     return jsonify({'prompts': prompts})
 
 
@@ -454,7 +413,6 @@ def api_image():
         data['model'] = None
 
     try:
-        print('SD inputs:', data, sep="\n")
         image = generate_image(data['prompt'], data['steps'], data['scale'], data['sampler'], data['model'])
         base64image = image_to_base64(image)
         return jsonify({'image': base64image})
