@@ -7,7 +7,7 @@ import time
 import gc
 
 class Summarizer:
-    max_chunk_length = 3000
+    max_chunk_length = 999999999
 
     def __init__(self, model, device, torch_dtype):
         self.main_device = device
@@ -52,24 +52,10 @@ class Summarizer:
 
     def summarize_chunks(self, text: str, params: dict) -> str:
         try:
-            if len(text) > self.max_chunk_length:
-                chunks = self.__chunkstring(text, self.max_chunk_length)
-                summary = ""
-                new_params = params.copy()
-                new_params['max_length'] = new_params['max_length'] // len(chunks)
-                new_params['min_length'] = new_params['min_length'] // len(chunks)
-                if(new_params['max_length']) < 56:
-                    new_params['max_length'] = 56
-                for chunk in chunks:
-                    summary += self.summarize_chunks(chunk, new_params) + ". "
-                return summary
-            else:
-                summary = self.__summarize(text, params)
-                return summary
+            return self.__summarize(text, params)
         except IndexError:
             print("Sequence length too large for model, cutting text in half and calling again")
-            self.max_chunk_length = self.max_chunk_length // 2
-            return self.summarize_chunks(text, params)
-        
-    def __chunkstring(self, string, length):
-        return [string[0+i:length+i] for i in range(0, len(string), length)]
+            new_params = params.copy()
+            new_params['max_length'] = new_params['max_length'] // 2
+            new_params['min_length'] = new_params['min_length'] // 2
+            return self.summarize_chunks(text[:(len(text) // 2)], new_params) + self.summarize_chunks(text[(len(text) // 2):], new_params)
