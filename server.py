@@ -208,17 +208,6 @@ def classify_text(text: str) -> list:
     output = classifier.text_to_reaction(text)
     return sorted(output, key=lambda x: x['score'], reverse=True)
 
-def summarize_chunks(text: str, params: dict) -> str:
-    try:
-        summary = summarizer.summarize(text, params)
-        return normalize_string(summary)
-    except IndexError:
-        print("Sequence length too large for model, cutting text in half and calling again")
-        new_params = params.copy()
-        new_params['max_length'] = new_params['max_length'] // 2
-        new_params['min_length'] = new_params['min_length'] // 2
-        return summarize_chunks(text[:(len(text) // 2)], new_params) + summarize_chunks(text[(len(text) // 2):], new_params)
-
 
 def normalize_string(input: str) -> str:
     output = " ".join(unicodedata.normalize("NFKC", input).strip().split())
@@ -339,7 +328,7 @@ def api_summarize():
         params.update(data['params'])
 
     print('Summary input:', data['text'], sep="\n")
-    summary = summarize_chunks(data['text'], params)
+    summary = normalize_string(summarizer.summarize_chunks(data['text'], params))
     print('Summary output:', summary, sep="\n")
     return jsonify({'summary': summary})
 
