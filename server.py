@@ -9,6 +9,7 @@ from transformers import BlipForConditionalGeneration, GPT2Tokenizer
 import unicodedata
 import torch
 import time
+import gc
 from PIL import Image
 import base64
 from io import BytesIO
@@ -42,7 +43,25 @@ DEFAULT_SUMMARIZE_PARAMS = {
     'max_length': 500,
     'min_length': 200,
     'length_penalty': 1.5,
-    'bad_words': ["\n", '"', "*", "[", "]", "{", "}", ":", "(", ")", "<", ">", "Â"]
+    'bad_words': [
+        "\n",
+        '"',
+        "*",
+        "[",
+        "]",
+        "{",
+        "}",
+        ":",
+        "(",
+        ")",
+        "<",
+        ">",
+        "Â",
+        "The text ends",
+        "The story ends",
+        "The text is",
+        "The story is",
+    ]
 }
 
 class SplitArgs(argparse.Action):
@@ -310,8 +329,13 @@ def api_caption():
         abort(400, '"image" is required')
 
     image = Image.open(BytesIO(base64.b64decode(data['image'])))
-    caption =  captioner.caption_image(image)
-    return jsonify({'caption': caption})
+    image = image.convert('RGB')
+    image.thumbnail((512, 512))
+    caption = captioner.caption_image(image)
+    thumbnail = image_to_base64(image)
+    print('Caption:', caption, sep="\n")
+    gc.collect()
+    return jsonify({'caption': caption, 'thumbnail': thumbnail})
 
 
 @app.route('/api/summarize', methods=['POST'])
@@ -330,6 +354,7 @@ def api_summarize():
     print('Summary input:', data['text'], sep="\n")
     summary = normalize_string(summarizer.summarize_chunks(data['text'], params))
     print('Summary output:', summary, sep="\n")
+    gc.collect()
     return jsonify({'summary': summary})
 
 
@@ -344,6 +369,7 @@ def api_classify():
     print('Classification input:', data['text'], sep="\n")
     classification = classify_text(data['text'])
     print('Classification output:', classification, sep="\n")
+    gc.collect()
     return jsonify({'classification': classification})
 
 
