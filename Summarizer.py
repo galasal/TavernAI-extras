@@ -7,7 +7,8 @@ import time
 import gc
 
 class Summarizer:
-    max_chunk_length = 3000
+    max_chunk_tokens = 1024
+    min_chunk_tokens = 56
 
     def __init__(self, model, device, torch_dtype):
         self.main_device = device
@@ -18,15 +19,16 @@ class Summarizer:
 
     def __summarize(self, text: str, params: dict) -> str:
         # Tokenize input
-        inputs = self.summarization_tokenizer(text, return_tensors="pt").to(self.main_device)
-        token_count = len(inputs[0])
+        token_count, inputs = self.__get_tokens(text)
+        #no summary if smaller than minimum
+        if(token_count < self.min_chunk_tokens):
+            return ""
 
         bad_words_ids = [
             self.summarization_tokenizer(bad_word, add_special_tokens=False).input_ids
             for bad_word in params['bad_words']
         ]
-        #load transformer into vram if using gpu
-        self.summarization_transformer.to(self.main_device)
+        
 
         summary_ids = self.summarization_transformer.generate(
             inputs["input_ids"],
@@ -43,30 +45,47 @@ class Summarizer:
             summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )[0]
 
-        #unload transformer from vram
-        self.summarization_transformer.to(self.standby_device)
-        torch.cuda.empty_cache()
-
         return summary
 
 
     def summarize_chunks(self, text: str, params: dict) -> str:
         try:
-            if len(text) > self.max_chunk_length:
-                chunks = self.__chunkstring(text, self.max_chunk_length)
-                summary = ""
-                for chunk in chunks:
-                    summary += self.__summarize(chunk, params) + ". "
-                #summarize the summary to shrink it to correct length
-                summary = self.__summarize(summary, params)
-                return summary
+            #load transformer into vram if using gpu
+            self.summarization_transformer.to(self.main_device)
+
+            chunks = self.__chunkstring(text)
+            summary = ""
+            for chunk in chunks:
+                summary += self.__summarize(chunk, params) + ". "
+            token_count, inputs = self.__get_tokens(summary)
+            #summarize the summary to shrink it to correct length if necessary
+            if(token_count >= self.max_chunk_tokens):
+                return self.summarize_chunks(summary, params)
+            elif(token_count > params['max_length']):
+                return self.__summarize(summary, params)
             else:
-                summary = self.__summarize(text, params)
                 return summary
         except IndexError:
             print("Sequence length too large for model, cutting text in half and calling again")
-            self.max_chunk_length = self.max_chunk_length // 2
-            return self.summarize_chunks(text, params)
-        
-    def __chunkstring(self, string, length):
-        return [string[0+i:length+i] for i in range(0, len(string), length)]
+            new_params = params.copy()
+            new_params['max_length'] = new_params['max_length'] // 2
+            new_params['min_length'] = new_params['min_length'] // 2
+            return self.summarize_chunks(text[:(len(text) // 2)], new_params) + self.summarize_chunks(text[(len(text) // 2):], new_params)
+        finally:
+            #unload transformer from vram
+            self.summarization_transformer.to(self.standby_device)
+            torch.cuda.empty_cache()
+
+
+    def __chunkstring(self, text):
+        token_count, inputs = self.__get_tokens(text)
+        num_chunks = (token_count + self.max_chunk_tokens - 1) // self.max_chunk_tokens
+        chunk_length = len(text) // num_chunks
+        chunks = [text[i:i+chunk_length] for i in range(0, len(text), chunk_length)]
+        return chunks
+    
+
+    def __get_tokens(self, text):
+        inputs = self.summarization_tokenizer(text, return_tensors="pt").to(self.main_device)
+        token_count = len(inputs[0])
+        return token_count, inputs
