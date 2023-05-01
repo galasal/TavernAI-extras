@@ -68,8 +68,6 @@ class Summarizer:
         except IndexError:
             print("Sequence length too large for model, cutting text in half and calling again")
             new_params = params.copy()
-            new_params['max_length'] = new_params['max_length'] // 2
-            new_params['min_length'] = new_params['min_length'] // 2
             return self.summarize_chunks(text[:(len(text) // 2)], new_params) + self.summarize_chunks(text[(len(text) // 2):], new_params)
         finally:
             #unload transformer from vram

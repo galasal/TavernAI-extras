@@ -145,7 +145,8 @@ if 'caption' in modules:
 
 if 'summarize' in modules:
     print('Initializing a text summarization model...')
-    summarizer = Summarizer(summarization_model, device, torch_dtype)
+    #hard coded to cpu due to issues with large summaries
+    summarizer = Summarizer(summarization_model, device=torch.device("cpu"), torch_dtype=torch.float32)
 
 if 'classify' in modules:
     print('Initializing a sentiment classification pipeline...')
