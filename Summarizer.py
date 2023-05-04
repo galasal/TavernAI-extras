@@ -7,7 +7,8 @@ import time
 import gc
 
 class Summarizer:
-    max_chunk_tokens = 1024
+    # 1024 is the actual limit, but need a little bit of leeway in case the calculation is wrong
+    max_chunk_tokens = 999
     min_chunk_tokens = 56
 
     def __init__(self, model, device, torch_dtype):
@@ -66,9 +67,9 @@ class Summarizer:
             else:
                 return summary
         except IndexError:
-            print("Sequence length too large for model, cutting text in half and calling again")
-            new_params = params.copy()
-            return self.summarize_chunks(text[:(len(text) // 2)], new_params) + self.summarize_chunks(text[(len(text) // 2):], new_params)
+            print("Sequence length too large for model, cutting chunk size in half and calling again")
+            self.max_chunk_tokens = self.max_chunk_tokens // 2
+            return self.summarize_chunks(text, params)
         finally:
             #unload transformer from vram
             self.summarization_transformer.to(self.standby_device)
