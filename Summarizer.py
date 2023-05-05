@@ -9,7 +9,7 @@ import gc
 class Summarizer:
     # 1024 is the actual limit, but need a little bit of leeway in case the calculation is wrong
     max_chunk_tokens = 999
-    min_chunk_tokens = 56
+    min_chunk_tokens = 64
 
     def __init__(self, model, device, torch_dtype):
         self.main_device = device
@@ -22,7 +22,7 @@ class Summarizer:
         # Tokenize input
         token_count, inputs = self.__get_tokens(text)
         #no summary if smaller than minimum
-        if(token_count < self.min_chunk_tokens):
+        if token_count < self.min_chunk_tokens:
             return ""
 
         bad_words_ids = [
@@ -48,6 +48,20 @@ class Summarizer:
 
         return summary
 
+    def combine_summary(self, old_summary: str, new_messages: str, params: dict) -> str:
+        try:
+            #load transformer into vram if using gpu
+            self.summarization_transformer.to(self.main_device)
+            #min length is 75% of max length
+            params['min_length'] = params['max_length'] * 3 // 4
+            new_summary = self.__summarize(new_messages, params)
+            summary = old_summary + "\n" + new_summary
+            summary = self.__summarize(summary, params)
+            return summary
+        finally:
+            #unload transformer from vram
+            self.summarization_transformer.to(self.standby_device)
+            torch.cuda.empty_cache()
 
     def summarize_chunks(self, text: str, params: dict) -> str:
         try:
@@ -55,14 +69,16 @@ class Summarizer:
             self.summarization_transformer.to(self.main_device)
 
             chunks = self.__chunkstring(text)
+            params['min_length'] = params['max_length'] // len(chunks)
             summary = ""
             for chunk in chunks:
-                summary += self.__summarize(chunk, params) + ". "
+                summary += self.__summarize(chunk, params)
             token_count, inputs = self.__get_tokens(summary)
             #summarize the summary to shrink it to correct length if necessary
             if(token_count >= self.max_chunk_tokens):
                 return self.summarize_chunks(summary, params)
             elif(token_count > params['max_length']):
+                params['min_length'] = params['max_length']
                 return self.__summarize(summary, params)
             else:
                 return summary
@@ -81,6 +97,10 @@ class Summarizer:
         num_chunks = (token_count + self.max_chunk_tokens - 1) // self.max_chunk_tokens
         chunk_length = len(text) // num_chunks
         chunks = [text[i:i+chunk_length] for i in range(0, len(text), chunk_length)]
+
+        #remove chunks whose length is too short
+        chunks = [chunk for chunk in chunks if self.__get_tokens(chunk)[0] >= self.min_chunk_tokens]
+
         return chunks
     
 
