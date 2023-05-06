@@ -41,7 +41,7 @@ DEFAULT_SUMMARIZE_PARAMS = {
     'temperature': 1.0,
     'repetition_penalty': 1.0,
     'max_length': 500,
-    'min_length': 200,
+    'min_length': 375,
     'length_penalty': 1.5,
     'bad_words': [
         "\n",
@@ -61,6 +61,7 @@ DEFAULT_SUMMARIZE_PARAMS = {
         "The story ends",
         "The text is",
         "The story is",
+        "The video is"
     ]
 }
 
@@ -146,7 +147,7 @@ if 'caption' in modules:
 if 'summarize' in modules:
     print('Initializing a text summarization model...')
     #hard coded to cpu due to issues with large summaries
-    summarizer = Summarizer(summarization_model, device=torch.device("cpu"), torch_dtype=torch.float32)
+    summarizer = Summarizer(summarization_model, device, torch_dtype)
 
 if 'classify' in modules:
     print('Initializing a sentiment classification pipeline...')
@@ -354,6 +355,27 @@ def api_summarize():
 
     print('Summary input:', data['text'], sep="\n")
     summary = normalize_string(summarizer.summarize_chunks(data['text'], params))
+    print('Summary output:', summary, sep="\n")
+    gc.collect()
+    return jsonify({'summary': summary})
+
+@app.route('/api/combine_summary', methods=['POST'])
+@require_module('summarize')
+def api_combine_summary():
+    data = request.get_json()
+
+    if 'old_summary' not in data or not isinstance(data['old_summary'], str):
+        abort(400, '"old_summary" is required')
+    if 'new_messages' not in data or not isinstance(data['new_messages'], str):
+        abort(400, '"new_messages" is required')
+
+    params = DEFAULT_SUMMARIZE_PARAMS.copy()
+
+    if 'params' in data and isinstance(data['params'], dict):
+        params.update(data['params'])
+
+    print('Summary input:', data['old_summary'] + "\n" + data['new_messages'], sep="\n")
+    summary = normalize_string(summarizer.combine_summary(data['old_summary'], data['new_messages'], params))
     print('Summary output:', summary, sep="\n")
     gc.collect()
     return jsonify({'summary': summary})

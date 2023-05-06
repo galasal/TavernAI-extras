@@ -16,6 +16,8 @@ class Summarizer:
         self.standby_device = torch.device("cpu")
         self.summarization_tokenizer = AutoTokenizer.from_pretrained(model)
         self.summarization_transformer = AutoModelForSeq2SeqLM.from_pretrained(model, torch_dtype=torch_dtype)
+        self.summarization_transformer.to(self.standby_device)
+        torch.cuda.empty_cache()
 
 
     def __summarize(self, text: str, params: dict) -> str:

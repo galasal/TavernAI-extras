@@ -28,6 +28,8 @@ class Captioner:
             self.captioning_transformer = BlipForConditionalGeneration.from_pretrained(captioning_model, torch_dtype=torch_dtype)
         else:
             self.captioning_transformer = AutoModelForCausalLM.from_pretrained(captioning_model, torch_dtype=torch_dtype)
+        self.captioning_transformer.to(self.standby_device)
+        torch.cuda.empty_cache()
 
     def caption_image(self, raw_image: Image, max_new_tokens: int = 20) -> str:
         #load model into vram
