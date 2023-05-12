@@ -134,3 +134,8 @@ dmypy.json
 
 #vscode
 .vscode/
+
+debug.png
+test.wav
+/tts_samples
+model.pt

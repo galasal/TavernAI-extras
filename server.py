@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import Flask, jsonify, request, render_template_string, abort
+from flask import Flask, jsonify, request, render_template_string, abort, send_from_directory, send_file
 from flask_cors import CORS
 import markdown
 import argparse
@@ -9,6 +9,7 @@ from transformers import BlipForConditionalGeneration, GPT2Tokenizer
 import unicodedata
 import torch
 import time
+import os
 import gc
 from PIL import Image
 import base64
@@ -36,6 +37,8 @@ DEFAULT_PROMPT_MODEL = 'FredZhang7/anime-anything-promptgen-v2'
 DEFAULT_SD_MODEL = "ckpt/anything-v4.5-vae-swapped"
 DEFAULT_REMOTE_SD_HOST = "127.0.0.1"
 DEFAULT_REMOTE_SD_PORT = 7860
+SILERO_SAMPLES_PATH = 'tts_samples'
+SILERO_SAMPLE_TEXT = 'The quick brown fox jumps over the lazy dog'
 #ALL_MODULES = ['caption', 'summarize', 'classify', 'keywords', 'prompt', 'sd']
 DEFAULT_SUMMARIZE_PARAMS = {
     'temperature': 1.0,
@@ -190,8 +193,19 @@ elif 'sd' in modules and sd_use_remote:
         print(f"{Fore.RED}{Style.BRIGHT}Could not connect to remote SD backend at http{'s' if sd_remote_ssl else ''}://{sd_remote_host}:{sd_remote_port}! Disabling SD module...{Style.RESET_ALL}")
         modules.remove('sd')
 
-prompt_prefix = "best quality, absurdres, "
-neg_prompt = """lowres, bad anatomy, error body, error hair, error arm,
+if 'tts' in modules:
+    if not os.path.exists(SILERO_SAMPLES_PATH):
+        os.makedirs(SILERO_SAMPLES_PATH)
+    print('Initializing Silero TTS server')
+    from silero_api_server import tts
+    tts_service = tts.SileroTtsService(SILERO_SAMPLES_PATH)
+    if len(os.listdir(SILERO_SAMPLES_PATH)) == 0:
+        print('Generating Silero TTS samples...')
+        tts_service.update_sample_text(SILERO_SAMPLE_TEXT)
+        tts_service.generate_samples()
+
+PROMPT_PREFIX = "best quality, absurdres, "
+NEGATIVE_PROMPT = """lowres, bad anatomy, error body, error hair, error arm,
 error hands, bad hands, error fingers, bad fingers, missing fingers
 error legs, bad legs, multiple legs, missing legs, error lighting,
 error shadow, error reflection, text, error, extra digit, fewer digits,
@@ -250,28 +264,31 @@ def generate_prompt(keywords: list, length: int = 100, num: int = 4) -> str:
     return [out['generated_text'] for out in outs]
 
 
-def generate_image(input: str, steps: int = 30, scale: int = 6, sampler: str = 'DDIM', model: str = None) -> Image:
-    prompt = normalize_string(f'{prompt_prefix}{input}')
-    print(prompt)
+def generate_image(data: dict) -> Image:
+    prompt = normalize_string(f'{data["prompt_prefix"]} {data["prompt"]}')
 
     if sd_use_remote:
-        if model is not None and model != sd_remote.util_get_current_model():
-            sd_remote.util_set_model(model, find_closest=False)
-            sd_remote.util_wait_for_ready()
-
         image = sd_remote.txt2img(
             prompt=prompt,
-            negative_prompt=neg_prompt,
-            sampler_name=sampler,
-            steps=steps,
-            cfg_scale=scale,
+            negative_prompt=data['negative_prompt'],
+            sampler_name=data['sampler'],
+            steps=data['steps'],
+            cfg_scale=data['scale'],
+            width=data['width'],
+            height=data['height'],
+            save_images=True,
+            send_images=True,
+            do_not_save_grid=False,
+            do_not_save_samples=False,
         ).image
     else:
         image = sd_pipe(
             prompt=prompt,
-            negative_prompt=neg_prompt,
-            num_inference_steps=steps,
-            guidance_scale=scale,
+            negative_prompt=data['negative_prompt'],
+            num_inference_steps=data['steps'],
+            guidance_scale=data['scale'],
+            width=data['width'],
+            height=data['height'],
         ).images[0]
 
     image.save("./debug.png")
@@ -437,21 +454,35 @@ def api_prompt():
 @app.route('/api/image', methods=['POST'])
 @require_module('sd')
 def api_image():
+    required_fields = {
+        'prompt': str, 
+    }
+
+    optional_fields = {
+        'steps': 30, 
+        'scale': 6,
+        'sampler': 'DDIM',
+        'width': 512,
+        'height': 512,
+        'prompt_prefix': PROMPT_PREFIX,
+        'negative_prompt': NEGATIVE_PROMPT
+    }
+
     data = request.get_json()
 
-    if 'prompt' not in data or not isinstance(data['prompt'], str):
-        abort(400, '"prompt" is required')
-    if 'steps' not in data or not isinstance(data['steps'], int):
-        data['steps'] = 30
-    if 'scale' not in data or not isinstance(data['scale'], int):
-        data['scale'] = 6
-    if 'sampler' not in data or not isinstance(data['sampler'], str):
-        data['sampler'] = 'DDIM'
-    if 'model' not in data or not isinstance(data['model'], str):
-        data['model'] = None
+    # Check required fields
+    for field, field_type in required_fields.items():
+        if field not in data or not isinstance(data[field], field_type):
+            abort(400, f'"{field}" is required')
+
+    # Set optional fields to default values if not provided
+    for field, default_value in optional_fields.items():
+        if field not in data or not isinstance(data[field], type(default_value)):
+            data[field] = default_value
 
     try:
-        image = generate_image(data['prompt'], data['steps'], data['scale'], data['sampler'], data['model'])
+        print('SD inputs:', data, sep="\n")
+        image = generate_image(data)
         base64image = image_to_base64(image)
         return jsonify({'image': base64image})
     except RuntimeError as e:
@@ -509,6 +540,36 @@ def api_image_samplers():
 def get_modules():
     return jsonify({'modules': modules})
 
+@app.route("/api/tts/speakers", methods=['GET'])
+def tts_speakers():
+    voices = [
+        {
+            "name":speaker,
+            "voice_id":speaker,
+            "preview_url": f"{str(request.url_root)}api/tts/sample/{speaker}"
+        } for speaker in tts_service.get_speakers()
+    ]
+    return jsonify(voices)
+
+@app.route("/api/tts/generate", methods=['POST'])
+def tts_generate():
+    voice = request.get_json()
+    if 'text' not in voice or not isinstance(voice['text'], str):
+        abort(400, '"text" is required')
+    if 'speaker' not in voice or not isinstance(voice['speaker'], str):
+        abort(400, '"speaker" is required')
+    # Remove asterisks
+    voice['text'] = voice['text'].replace("*", "")
+    try:
+        audio = tts_service.generate(voice['speaker'], voice['text'])
+        return send_file(audio, mimetype='audio/x-wav')
+    except Exception as e:
+        print(e)
+        abort(500, voice['speaker'])
+
+@app.route("/api/tts/sample/<speaker>", methods=['GET'])
+def tts_play_sample(speaker: str):
+    return send_from_directory(SILERO_SAMPLES_PATH, f"{speaker}.wav")
 
 if args.share:
     from flask_cloudflared import _run_cloudflared

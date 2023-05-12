@@ -1,4 +1,4 @@
-# TavernAI - Extras
+# SillyTavern - Extras
 ## What is this
 A set of APIs for various SillyTavern extensions.
 
@@ -7,15 +7,12 @@ A set of APIs for various SillyTavern extensions.
 All modules require at least 6 Gb of VRAM to run. With Stable Diffusion disabled, it will probably fit in 4 Gb.
 Alternatively, everything could also be run on the CPU.
 
-Try on Colab (runs KoboldAI backend and TavernAI Extras server alongside):  <a target="_blank" href="https://colab.research.google.com/github/Cohee1207/SillyTavern/blob/main/colab/GPU.ipynb">
+Try on Colab (will give you a link to Extras API):  <a target="_blank" href="https://colab.research.google.com/github/Cohee1207/SillyTavern/blob/main/colab/GPU.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
 Colab link:
 https://colab.research.google.com/github/Cohee1207/SillyTavern/blob/main/colab/GPU.ipynb
-
-Alternative link (legacy, not endorsed):
-https://colab.research.google.com/github/Cohee1207/TavernAI-extras/blob/main/colab/GPU.ipynb
 
 ## How to run
 ### :exclamation: **IMPORTANT!**
@@ -29,41 +26,77 @@ https://colab.research.google.com/github/Cohee1207/TavernAI-extras/blob/main/col
 * Open colab link
 * Select desired "extra" options and start the cell
 * Wait for it to finish
-* Get an API URL link from colab output under the `### TavernAI Extensions LINK ###` title
-* Start TavernAI with extensions support: set `enableExtensions` to `true` in [config.conf](https://github.com/Cohee1207/SillyTavern/blob/dev/config.conf)
-* Navigate to TavernAI settings and put in an API URL and tap "Connect" to load the extensions
+* Get an API URL link from colab output under the `### SillyTavern Extensions LINK ###` title
+* Start SillyTavern with extensions support: set `enableExtensions` to `true` in [config.conf](https://github.com/Cohee1207/SillyTavern/blob/dev/config.conf)
+* Navigate to SillyTavern extensions menu and put in an API URL and tap "Connect" to load the extensions
+
+### What about mobile/Android/Termux? 🤔
+
+There are some folks in the community having success running Extras on their phones via Ubuntu on Termux. This project wasn't made with mobile support in mind, so this guide is provided strictly for your information only: https://rentry.org/STAI-Termux#downloading-and-running-tai-extras
+
+#### ❗ IMPORTANT!
+
+I will not provide any support for running this on Android. Direct all your questions to the creator of this guide.
 
 ### 💻 Locally
 #### Option 1 - Conda (recommended) 🐍
+
+**PREREQUISITES**
 * Install Miniconda: https://docs.conda.io/en/latest/miniconda.html
+* _(Important!) Read how to use Conda: https://conda.io/projects/conda/en/latest/user-guide/getting-started.html_
 * Install git: https://git-scm.com/downloads
+
+**EXECUTE THESE COMMANDS ONE BY ONE IN THE _CONDA COMMAND PROMPT_.**
+
+**TYPE/PASTE EACH COMMAND INTO THE PROMPT, HIT ENTER AND WAIT FOR IT TO FINISH!**
+
 * Before the first run, create an environment (let's call it `extras`):
 ```
 conda create -n extras
+```
+* Now activate the newly created env
+```
 conda activate extras
-conda install pytorch torchvision torchaudio pytorch-cuda=11.7 git -c pytorch -c nvidia
-git clone https://github.com/Cohee1207/TavernAI-extras
-cd TavernAI-extras
+```
+* Install the required system packages
+```
+conda install pytorch=2.0.0 torchvision=0.15.0 torchaudio=2.0.0 pytorch-cuda=11.7 git -c pytorch -c nvidia
+```
+* Clone this repository
+```
+git clone https://github.com/Cohee1207/SillyTavern-extras
+```
+* Navigated to the freshly cloned repository
+```
+cd SillyTavern-extras
+```
+* Install the project requirements
+```
 pip install -r requirements.txt
 ```
-* Run `python server.py --enable-modules=caption,summarize,classify`
-* Get the API URL. Defaults to `http://localhost:5100` if you run locally.
-* Start SillyTavern with extensions support: set `enableExtensions` to `true` in [config.conf](https://github.com/Cohee1207/SillyTavern/blob/dev/config.conf)
-* Navigate to SillyTavern extensions menu and put in an API URL and tap "Connect" to load the extensions
-* To run again, simply activate the environment and run the script:
+* Run the Extensions API server
+```
+python server.py --enable-modules=caption,summarize,classify
+```
+* Copy the Extra's server API URL listed in the console window after it finishes loading up. On local installs, this defaults to `http://localhost:5100`.
+* Open your SillyTavern [config.conf](https://github.com/Cohee1207/SillyTavern/blob/dev/config.conf) file (located in the base install folder), and look for a line "`const enableExtensions`". Make sure that line has "`= true`", and not "`= false`". 
+* Start your SillyTavern server
+* Open the Extensions panel (via the 'Stacked Blocks' icon at the top of the page), paste the API URL into the input box, and click "Connect" to connect to the Extras extension server.
+* To run again, simply activate the environment and run these commands. Be sure to the additional options for server.py (see below) that your setup requires.
 ```
 conda activate extras
 python server.py
 ```
+
 #### Option 2 - Vanilla 🍦
 * Install Python 3.10: https://www.python.org/downloads/release/python-31010/
 * Install git: https://git-scm.com/downloads
 * Clone the repo:
 ```
-git clone https://github.com/Cohee1207/TavernAI-extras
-cd TavernAI-extras
+git clone https://github.com/Cohee1207/SillyTavern-extras
+cd SillyTavern-extras
 ```
-* Run `pip install -r requirements.txt`
+* Run `python -m pip install -r requirements.txt`
 * Run `python server.py --enable-modules=caption,summarize,classify`
 * Get the API URL. Defaults to `http://localhost:5100` if you run locally.
 * Start SillyTavern with extensions support: set `enableExtensions` to `true` in [config.conf](https://github.com/Cohee1207/SillyTavern/blob/dev/config.conf)
@@ -79,6 +112,7 @@ cd TavernAI-extras
 | `keywords`  | Text key phrases extraction       | ✔️ Yes      |
 | `prompt`    | SD prompt generation from text    | ✔️ Yes     |
 | `sd`        | Stable Diffusion image generation | :x: No (✔️ remote)      |
+| `tts`       | [Silero TTS server](https://github.com/ouoertheo/silero-api-server) | :x: |
 
 
 ## Additional options
@@ -90,7 +124,7 @@ cd TavernAI-extras
 | `--share`                | Share the app on CloudFlare tunnel                                     |
 | `--cpu`                  | Run the models on the CPU instead of CUDA                              |
 | `--summarization-model`  | Load a custom summarization model.<br>Expects a HuggingFace model ID.<br>Default: [Qiliang/bart-large-cnn-samsum-ChatGPT_v3](https://huggingface.co/Qiliang/bart-large-cnn-samsum-ChatGPT_v3) |
-| `--classification-model` | Load a custom sentiment classification model.<br>Expects a HuggingFace model ID.<br>Default (6 emotions): [bhadresh-savani/distilbert-base-uncased-emotion](https://huggingface.co/bhadresh-savani/distilbert-base-uncased-emotion)<br>Other solid option is (28 emotions): [joeddav/distilbert-base-uncased-go-emotions-student](https://huggingface.co/joeddav/distilbert-base-uncased-go-emotions-student) |
+| `--classification-model` | Load a custom sentiment classification model.<br>Expects a HuggingFace model ID.<br>Default (6 emotions): [nateraw/bert-base-uncased-emotion](https://huggingface.co/nateraw/bert-base-uncased-emotion)<br>Other solid option is (28 emotions): [joeddav/distilbert-base-uncased-go-emotions-student](https://huggingface.co/joeddav/distilbert-base-uncased-go-emotions-student) |
 | `--captioning-model`     | Load a custom captioning model.<br>Expects a HuggingFace model ID.<br>Default: [Salesforce/blip-image-captioning-large](https://huggingface.co/Salesforce/blip-image-captioning-large) |
 | `--keyphrase-model`      | Load a custom key phrase extraction model.<br>Expects a HuggingFace model ID.<br>Default: [ml6team/keyphrase-extraction-distilbert-inspec](https://huggingface.co/ml6team/keyphrase-extraction-distilbert-inspec) |
 | `--prompt-model`         | Load a custom prompt generation model.<br>Expects a HuggingFace model ID.<br>Default: [FredZhang7/anime-anything-promptgen-v2](https://huggingface.co/FredZhang7/anime-anything-promptgen-v2) |
@@ -259,3 +293,29 @@ None
 { "previous_model": "name of the previous model", "current_model": "name of the newly loaded model" }
 ```
 
+### Generate TTS voice
+`POST /api/tts/generate`
+#### **Input**
+```
+{ "speaker": "speaker voice_id", "text": "text to narrate" }
+```
+#### **Output**
+WAV audio file.
+
+### Get TTS voices
+`GET /api/tts/speakers`
+#### **Output**
+```
+[
+    {
+        "name": "en_0",
+        "preview_url": "http://127.0.0.1:5100/api/tts/sample/en_0",
+        "voice_id": "en_0"
+    }
+]
+```
+
+### Get TTS voice sample
+`GET /api/tts/sample/<voice_id>`
+#### **Output**
+WAV audio file.
