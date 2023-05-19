@@ -138,4 +138,8 @@ dmypy.json
 debug.png
 test.wav
 /tts_samples
+/tts_models
+/tmp
+/tts_cache
+checkpoint_best_legacy_500.pt
 model.pt

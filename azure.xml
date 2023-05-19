@@ -1,0 +1,11 @@
+<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" 
+    xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-US">
+    <voice name="en-US-SaraNeural">
+        <mstts:express-as style="cheerful" styledegree="2">
+            <mstts:silence type="Sentenceboundary" value="100ms" />
+            <prosody pitch="x-high" rate="1">
+                
+            </prosody>
+        </mstts:express-as>
+    </voice>
+</speak>

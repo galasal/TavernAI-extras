@@ -20,6 +20,7 @@ from Summarizer import Summarizer
 from Captioner import Captioner
 import webuiapi
 from colorama import Fore, Style, init as colorama_init
+from TtsInferer import TtsInferer
 
 colorama_init()
 
@@ -37,8 +38,7 @@ DEFAULT_PROMPT_MODEL = 'FredZhang7/anime-anything-promptgen-v2'
 DEFAULT_SD_MODEL = "ckpt/anything-v4.5-vae-swapped"
 DEFAULT_REMOTE_SD_HOST = "127.0.0.1"
 DEFAULT_REMOTE_SD_PORT = 7860
-SILERO_SAMPLES_PATH = 'tts_samples'
-SILERO_SAMPLE_TEXT = 'The quick brown fox jumps over the lazy dog'
+TTS_SAMPLE_TEXT = 'The quick brown fox jumps over the lazy dog'
 #ALL_MODULES = ['caption', 'summarize', 'classify', 'keywords', 'prompt', 'sd']
 DEFAULT_SUMMARIZE_PARAMS = {
     'temperature': 1.0,
@@ -92,6 +92,8 @@ parser.add_argument('--captioning-model',
 parser.add_argument('--keyphrase-model',
                     help="Load a custom keyphrase extraction model")
 parser.add_argument('--prompt-model',
+                    help="Load a custom prompt generation model")
+parser.add_argument('--tts-model',
                     help="Load a custom prompt generation model")
 
 sd_group = parser.add_mutually_exclusive_group()
@@ -168,6 +170,23 @@ if 'prompt' in modules:
     gpt_model = AutoModelForCausalLM.from_pretrained(prompt_model)
     prompt_generator = pipeline('text-generation', model=gpt_model, tokenizer=gpt_tokenizer)
 
+if 'tts' in modules:
+    try:
+        print('Initializing TTS server')
+        if args.tts_model:
+            tts_model = args.tts_model
+        else: 
+            tts_models = os.listdir("tts_models")
+            if len(tts_models) > 0:
+                tts_model = tts_models[0]
+                print(f"No TTS model selected, using model {tts_model} by default")
+        if classifier is None:
+            classifier = EmotionClassifier(classification_model, device)
+        tts_service = TtsInferer(tts_model, classifier, device)        
+    except Exception as e:
+        print(f'{Fore.RED}{Style.BRIGHT}TTS model could not be loaded! a so-vits-svc model must be in the tts_models folder to use TTS{Style.RESET_ALL}')
+        modules.remove("tts")
+
 if 'sd' in modules and not sd_use_remote:
     from diffusers import StableDiffusionPipeline
     from diffusers import EulerAncestralDiscreteScheduler
@@ -192,17 +211,6 @@ elif 'sd' in modules and sd_use_remote:
         # remote sd from modules
         print(f"{Fore.RED}{Style.BRIGHT}Could not connect to remote SD backend at http{'s' if sd_remote_ssl else ''}://{sd_remote_host}:{sd_remote_port}! Disabling SD module...{Style.RESET_ALL}")
         modules.remove('sd')
-
-if 'tts' in modules:
-    if not os.path.exists(SILERO_SAMPLES_PATH):
-        os.makedirs(SILERO_SAMPLES_PATH)
-    print('Initializing Silero TTS server')
-    from silero_api_server import tts
-    tts_service = tts.SileroTtsService(SILERO_SAMPLES_PATH)
-    if len(os.listdir(SILERO_SAMPLES_PATH)) == 0:
-        print('Generating Silero TTS samples...')
-        tts_service.update_sample_text(SILERO_SAMPLE_TEXT)
-        tts_service.generate_samples()
 
 PROMPT_PREFIX = "best quality, absurdres, "
 NEGATIVE_PROMPT = """lowres, bad anatomy, error body, error hair, error arm,
@@ -546,7 +554,8 @@ def tts_speakers():
         {
             "name":speaker,
             "voice_id":speaker,
-            "preview_url": f"{str(request.url_root)}api/tts/sample/{speaker}"
+            "preview_url": False
+            #"preview_url": f"{str(request.url_root)}api/tts/sample/{speaker}"
         } for speaker in tts_service.get_speakers()
     ]
     return jsonify(voices)
@@ -561,15 +570,12 @@ def tts_generate():
     # Remove asterisks
     voice['text'] = voice['text'].replace("*", "")
     try:
-        audio = tts_service.generate(voice['speaker'], voice['text'])
-        return send_file(audio, mimetype='audio/x-wav')
+        tts_service.infer(voice['text'], voice['speaker'])
+        return send_file(tts_service.tmp_wav_path, mimetype='audio/wav')
     except Exception as e:
         print(e)
         abort(500, voice['speaker'])
 
-@app.route("/api/tts/sample/<speaker>", methods=['GET'])
-def tts_play_sample(speaker: str):
-    return send_from_directory(SILERO_SAMPLES_PATH, f"{speaker}.wav")
 
 if args.share:
     from flask_cloudflared import _run_cloudflared
