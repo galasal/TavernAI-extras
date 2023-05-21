@@ -95,6 +95,8 @@ parser.add_argument('--prompt-model',
                     help="Load a custom prompt generation model")
 parser.add_argument('--tts-model',
                     help="Load a custom prompt generation model")
+parser.add_argument('--tts-azure', action='store_true',
+                    help="Use microsoft azure for TTS")
 
 sd_group = parser.add_mutually_exclusive_group()
 local_sd = sd_group.add_argument_group('sd-local')
@@ -182,7 +184,8 @@ if 'tts' in modules:
                 print(f"No TTS model selected, using model {tts_model} by default")
         if classifier is None:
             classifier = EmotionClassifier(classification_model, device)
-        tts_service = TtsInferer(tts_model, classifier, device)        
+        use_azure = True if args.tts_azure else False
+        tts_service = TtsInferer(tts_model, classifier, device, use_azure)        
     except Exception as e:
         print(f'{Fore.RED}{Style.BRIGHT}TTS model could not be loaded! a so-vits-svc model must be in the tts_models folder to use TTS{Style.RESET_ALL}')
         modules.remove("tts")
