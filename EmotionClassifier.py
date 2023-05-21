@@ -68,13 +68,13 @@ class EmotionClassifier:
         'anxiety': 'fear'
     }
 
-    def __init__(self, model, device):
+    def __init__(self, model, device, torch_dtype):
         if device == "cpu":
             device = -1
         else:
             device = 0
         self.classifier = pipeline(
-            'text-classification', model=model, device=device)
+            'text-classification', model=model, device=device, top_k=None, torch_dtype=torch_dtype)
         self.last_text = None
         self.last_result = None
 
@@ -82,7 +82,7 @@ class EmotionClassifier:
         if text == self.last_text:
             return self.last_result
         else:
-            emotion_labels = self.classifier(text)
+            emotion_labels = self.classifier(text, truncation=True, max_length=self.classifier.model.config.max_position_embeddings)
             self.last_text = text
             self.last_result = emotion_labels
             return emotion_labels

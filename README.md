@@ -2,7 +2,7 @@
 ## What is this
 A set of APIs for various SillyTavern extensions.
 
-**You need to run the lastest version of my TavernAI fork. Grab it here: [Direct link to ZIP](https://github.com/Cohee1207/SillyTavern/archive/refs/heads/main.zip), [Git repository](https://github.com/Cohee1207/SillyTavern)**
+**You need to run the latest version of my TavernAI fork. Grab it here: [Direct link to ZIP](https://github.com/Cohee1207/SillyTavern/archive/refs/heads/main.zip), [Git repository](https://github.com/Cohee1207/SillyTavern)**
 
 All modules require at least 6 Gb of VRAM to run. With Stable Diffusion disabled, it will probably fit in 4 Gb.
 Alternatively, everything could also be run on the CPU.
@@ -112,7 +112,8 @@ cd SillyTavern-extras
 | `keywords`  | Text key phrases extraction       | ✔️ Yes      |
 | `prompt`    | SD prompt generation from text    | ✔️ Yes     |
 | `sd`        | Stable Diffusion image generation | :x: No (✔️ remote)      |
-| `tts`       | [Silero TTS server](https://github.com/ouoertheo/silero-api-server) | :x: |
+| `tts`       | [Silero TTS server](https://github.com/ouoertheo/silero-api-server) | :x: No |
+| `chromadb`  | Infinity context server           | :x: No |
 
 
 ## Additional options
@@ -124,10 +125,11 @@ cd SillyTavern-extras
 | `--share`                | Share the app on CloudFlare tunnel                                     |
 | `--cpu`                  | Run the models on the CPU instead of CUDA                              |
 | `--summarization-model`  | Load a custom summarization model.<br>Expects a HuggingFace model ID.<br>Default: [Qiliang/bart-large-cnn-samsum-ChatGPT_v3](https://huggingface.co/Qiliang/bart-large-cnn-samsum-ChatGPT_v3) |
-| `--classification-model` | Load a custom sentiment classification model.<br>Expects a HuggingFace model ID.<br>Default (6 emotions): [nateraw/bert-base-uncased-emotion](https://huggingface.co/nateraw/bert-base-uncased-emotion)<br>Other solid option is (28 emotions): [joeddav/distilbert-base-uncased-go-emotions-student](https://huggingface.co/joeddav/distilbert-base-uncased-go-emotions-student) |
+| `--classification-model` | Load a custom sentiment classification model.<br>Expects a HuggingFace model ID.<br>Default (6 emotions): [nateraw/bert-base-uncased-emotion](https://huggingface.co/nateraw/bert-base-uncased-emotion)<br>Other solid option is (28 emotions): [joeddav/distilbert-base-uncased-go-emotions-student](https://huggingface.co/joeddav/distilbert-base-uncased-go-emotions-student)<br>For Chinese language: [touch20032003/xuyuan-trial-sentiment-bert-chinese](https://huggingface.co/touch20032003/xuyuan-trial-sentiment-bert-chinese) |
 | `--captioning-model`     | Load a custom captioning model.<br>Expects a HuggingFace model ID.<br>Default: [Salesforce/blip-image-captioning-large](https://huggingface.co/Salesforce/blip-image-captioning-large) |
 | `--keyphrase-model`      | Load a custom key phrase extraction model.<br>Expects a HuggingFace model ID.<br>Default: [ml6team/keyphrase-extraction-distilbert-inspec](https://huggingface.co/ml6team/keyphrase-extraction-distilbert-inspec) |
 | `--prompt-model`         | Load a custom prompt generation model.<br>Expects a HuggingFace model ID.<br>Default: [FredZhang7/anime-anything-promptgen-v2](https://huggingface.co/FredZhang7/anime-anything-promptgen-v2) |
+| `--embedding-model`      | Load a custom text embedding model.<br>Expects a HuggingFace model ID.<br>Default: [sentence-transformers/all-mpnet-base-v2](https://huggingface.co/sentence-transformers/all-mpnet-base-v2) |
 | `--sd-model`             | Load a custom Stable Diffusion image generation model.<br>Expects a HuggingFace model ID.<br>Default: [ckpt/anything-v4.5-vae-swapped](https://huggingface.co/ckpt/anything-v4.5-vae-swapped)<br>*Must have VAE pre-baked in PyTorch format or the output will look drab!* |
 | `--sd-cpu`               | Force the Stable Diffusion generation pipeline to run on the CPU.<br>**SLOW!** |
 | `--sd-remote`            | Use a remote SD backend.<br>**Supported APIs: [sd-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui)**  |
@@ -265,14 +267,14 @@ None
 `GET /api/image/models`
 #### **Output**
 ```
-{ "models": [list of all availabe model names] }
+{ "models": [list of all available model names] }
 ```
 
 ### Get available Stable Diffusion samplers
 `GET /api/image/samplers`
 #### **Output**
 ```
-{ "samplers": [list of all availabe sampler names] }
+{ "samplers": [list of all available sampler names] }
 ```
 
 ### Get currently loaded Stable Diffusion model
@@ -319,3 +321,62 @@ WAV audio file.
 `GET /api/tts/sample/<voice_id>`
 #### **Output**
 WAV audio file.
+
+### Add messages to chromadb
+`POST /api/chromadb`
+#### **Input**
+```
+{
+    "chat_id": "chat1 - 2023-12-31",
+    "messages": [
+        {
+            "id": "633a4bd1-8350-46b5-9ef2-f5d27acdecb7", 
+            "date": 1684164339877,
+            "role": "user",
+            "content": "Hello, AI world!",
+            "meta": "this is meta"
+        },
+        {
+            "id": "8a2ed36b-c212-4a1b-84a3-0ffbe0896506", 
+            "date": 1684164411759,
+            "role": "assistant",
+            "content": "Hello, Hooman!"
+        },
+    ] 
+}
+```
+#### **Output**
+```
+{ "count": 2 }
+```
+
+### Query chromadb
+`POST /api/chromadb/query`
+#### **Input**
+```
+{
+    "chat_id": "chat1 - 2023-12-31",
+    "query": "Hello",
+    "n_results": 2,
+}
+```
+#### **Output**
+```
+[
+    {
+        "id": "633a4bd1-8350-46b5-9ef2-f5d27acdecb7", 
+        "date": 1684164339877,
+        "role": "user",
+        "content": "Hello, AI world!",
+        "distance": 0.31,
+        "meta": "this is meta"
+    },
+    {
+        "id": "8a2ed36b-c212-4a1b-84a3-0ffbe0896506", 
+        "date": 1684164411759,
+        "role": "assistant",
+        "content": "Hello, Hooman!",
+        "distance": 0.29
+    },
+]
+```

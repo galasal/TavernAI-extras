@@ -143,3 +143,5 @@ test.wav
 /tts_cache
 checkpoint_best_legacy_500.pt
 model.pt
+.DS_Store
+.chroma
