@@ -74,7 +74,7 @@ class EmotionClassifier:
         else:
             device = 0
         self.classifier = pipeline(
-            'text-classification', model=model, device=device, top_k=None, torch_dtype=torch_dtype)
+            'text-classification', model=model, device=device, top_k=None)
         self.last_text = None
         self.last_result = None
 
@@ -89,8 +89,8 @@ class EmotionClassifier:
 
     def text_to_azure_emotion(self, text):
         emotion_labels = self.__classify(text)
-        score = emotion_labels[0]['score']
-        emotion = emotion_labels[0]['label']
+        score = emotion_labels[0][0]['score']
+        emotion = emotion_labels[0][0]['label']
         if score >= 0.8:
             return self.azure_emotions[emotion]
         else:
@@ -99,10 +99,10 @@ class EmotionClassifier:
     def text_to_reaction(self, text):
         emotion_labels = self.__classify(text)
         # replace label with label for reaction emotion
-        for emotion in emotion_labels:
+        for emotion in emotion_labels[0]:
             emotion['label'] = self.reaction_emotions[emotion['label']]
 
-        return emotion_labels
+        return emotion_labels[0]
 
     def get_all_reactions(self):
         return [

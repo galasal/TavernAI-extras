@@ -187,7 +187,7 @@ if 'tts' in modules:
                 tts_model = tts_models[0]
                 print(f"No TTS model selected, using model {tts_model} by default")
         if classifier is None:
-            classifier = EmotionClassifier(classification_model, device)
+            classifier = EmotionClassifier(classification_model, device, torch_dtype)
         use_azure = True if args.tts_azure else False
         tts_service = TtsInferer(tts_model, classifier, device, use_azure)        
     except Exception as e:
