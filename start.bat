@@ -1,3 +1,5 @@
 @echo off
 call activate extras
-python server.py --enable-modules=summarize,classify
+python server.py --enable-modules=summarize
+pause
+popd
